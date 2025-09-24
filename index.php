@@ -440,11 +440,12 @@ function renderExpiryBadge(?string $expires_at): string {
                                     name="note"
                                     rows="6"
                                     maxlength="255"
-                                    data-note-input><?= htmlspecialchars($noteValue, ENT_QUOTES) ?></textarea>
+                                    data-note-input
+                                    data-note-original="<?= htmlspecialchars($noteValue, ENT_QUOTES) ?>"><?= htmlspecialchars($noteValue, ENT_QUOTES) ?></textarea>
                           <div class="form-text text-end"><span data-note-counter-for="<?= htmlspecialchars($noteTextareaId, ENT_QUOTES) ?>"><?= (int)$noteInitialLength ?></span>/255</div>
                         </div>
                         <div class="d-flex justify-content-between">
-                          <button type="reset" class="btn btn-outline-secondary" data-fancybox-close>Annuler</button>
+                          <button type="button" class="btn btn-outline-secondary" data-fancybox-close data-note-cancel>Annuler</button>
                           <button type="submit" class="btn btn-primary">Enregistrer</button>
                         </div>
                       </form>
@@ -563,11 +564,25 @@ document.querySelectorAll('[data-note-input]').forEach(function (textarea) {
 });
 
 document.querySelectorAll('[data-note-form]').forEach(function (form) {
+  const textarea = form.querySelector('[data-note-input]');
+  if (!textarea) return;
+
+  function restoreOriginalNote() {
+    const original = textarea.getAttribute('data-note-original');
+    textarea.value = original !== null ? original : '';
+    updateNoteCounter(textarea);
+  }
+
+  const cancelBtn = form.querySelector('[data-note-cancel]');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', function () {
+      restoreOriginalNote();
+    });
+  }
+
   form.addEventListener('reset', function () {
-    const textarea = form.querySelector('[data-note-input]');
-    if (!textarea) return;
     window.setTimeout(function () {
-      updateNoteCounter(textarea);
+      restoreOriginalNote();
     }, 0);
   });
 });
