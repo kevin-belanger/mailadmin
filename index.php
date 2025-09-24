@@ -404,6 +404,7 @@ function renderExpiryBadge(?string $expires_at): string {
                           <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
                           <input type="hidden" name="action" value="reset_password">
                           <input type="hidden" name="email" value="<?= htmlspecialchars($r['email'], ENT_QUOTES) ?>">
+                          <p class="mb-2"><span class="fw-semibold">Boîte :</span> <span class="font-monospace"><?= htmlspecialchars($r['email']) ?></span></p>
                           <p class="small text-secondary mb-3">Choisis d’entrer un mot de passe manuellement ou laisse l’application en générer un automatiquement.</p>
                           <div class="form-check">
                             <input class="form-check-input" type="radio" name="pwd_mode" id="pwd_manual_<?= htmlspecialchars($hash, ENT_QUOTES) ?>" value="manual" checked data-password-input="#pwd_input_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">
