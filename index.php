@@ -7,6 +7,8 @@ $flash_msg = null;
 $flash_err = null;
 $success = null;
 $passwordShown = null;
+$passwordContext = null;
+$passwordEmail = null;
 
 // ---- Actions POST ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -17,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             switch ($action) {
                 case 'create_mailbox': {
-                    
+
                     $local  = sanitize_localpart((string)($_POST['localpart'] ?? ''));
                     $domain = strtolower(trim((string)($_POST['domain'] ?? '')));
                     $quota  = (int)($_POST['quota'] ?? DEFAULT_QUOTA_MIB);
@@ -41,6 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     upsert_mailbox_expiry($email, $expiry_days);
 
                     $passwordShown = $pwd;
+                    $passwordContext = 'create';
+                    $passwordEmail = $email;
                     $success = [
                         'email'=>$email,
                         'quota'=>$quota,
@@ -48,6 +52,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'data'=>$api['data'] ?? null
                     ];
                     $flash_msg = "Boîte créée : {$email}";
+                    break;
+                }
+                case 'reset_password': {
+                    $email = trim((string)($_POST['email'] ?? ''));
+                    $mode = (string)($_POST['pwd_mode'] ?? 'manual');
+                    $password = (string)($_POST['password'] ?? '');
+
+                    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        throw new RuntimeException("Adresse courriel invalide.");
+                    }
+                    [$local, $domain] = explode('@', $email, 2);
+                    if ($local === '' || $domain === '') {
+                        throw new RuntimeException("Adresse courriel invalide.");
+                    }
+                    $domain = strtolower($domain);
+                    if (!in_array($domain, ALLOWED_DOMAINS, true)) {
+                        throw new RuntimeException("Domaine non autorisé.");
+                    }
+
+                    if ($mode === 'auto') {
+                        $password = generate_password(16);
+                    } else {
+                        if ($password === '') {
+                            throw new RuntimeException("Le mot de passe est requis.");
+                        }
+                    }
+
+                    cpanel_passwd_pop($local, $domain, $password);
+
+                    $passwordShown = $password;
+                    $passwordContext = 'reset';
+                    $passwordEmail = $email;
+                    $flash_msg = "Mot de passe mis à jour pour {$email}.";
                     break;
                 }
                 case 'update_expiry': {
@@ -199,6 +236,13 @@ function renderExpiryBadge(?string $expires_at): string {
     <div class="alert alert-danger"><?= htmlspecialchars($flash_err, ENT_QUOTES) ?></div>
   <?php endif; ?>
 
+  <?php if ($passwordShown && $passwordContext === 'reset' && $passwordEmail): ?>
+    <div class="alert alert-warning">
+      <strong>Nouveau mot de passe pour <code><?= htmlspecialchars($passwordEmail, ENT_QUOTES) ?></code> :</strong>
+      <code><?= htmlspecialchars($passwordShown, ENT_QUOTES) ?></code>
+    </div>
+  <?php endif; ?>
+
   <!-- Création -->
   <div class="card shadow mb-4">
     <div class="card-body">
@@ -209,7 +253,7 @@ function renderExpiryBadge(?string $expires_at): string {
           <strong>Succès!</strong> <code><?= htmlspecialchars($success['email'], ENT_QUOTES) ?></code> — quota <code><?= (int)$success['quota'] ?></code> MiB — expiration:
           <code><?= $success['expiry'] === null ? 'jamais' : ((int)$success['expiry'].' jours') ?></code>
         </div>
-        <?php if ($passwordShown): ?>
+        <?php if ($passwordShown && $passwordContext === 'create'): ?>
           <div class="alert alert-warning mb-0"><strong>Mot de passe (affiché une seule fois):</strong> <code><?= htmlspecialchars($passwordShown, ENT_QUOTES) ?></code></div>
         <?php endif; ?>
         <hr>
@@ -313,6 +357,7 @@ function renderExpiryBadge(?string $expires_at): string {
               <th>Boite courriel</th>
               <th>Expiration</th>
               <th>Statut</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -321,6 +366,8 @@ function renderExpiryBadge(?string $expires_at): string {
               $ymd=''; $neverChecked='';
               if ($r['expires_at'] === null) { $neverChecked='checked'; }
               else { try { $ymd=(new DateTimeImmutable($r['expires_at'], new DateTimeZone('UTC')))->format('Y-m-d'); } catch(Throwable $e){ $ymd=''; } }
+              $hash = md5($r['email']);
+              $modalId = 'pwdModal_' . $hash;
           ?>
             <tr>
               <td><strong><?= htmlspecialchars($r['email']) ?></strong></td>
@@ -333,14 +380,53 @@ function renderExpiryBadge(?string $expires_at): string {
                          value="<?= htmlspecialchars($ymd, ENT_QUOTES) ?>" <?= $neverChecked?'disabled':'' ?>
                          style="min-width:150px;">
                   <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="never_<?= htmlspecialchars(md5($r['email'])) ?>"
+                    <input class="form-check-input" type="checkbox" id="never_<?= htmlspecialchars($hash, ENT_QUOTES) ?>"
                            name="never" <?= $neverChecked ?>>
-                    <label class="form-check-label small" for="never_<?= htmlspecialchars(md5($r['email'])) ?>">jamais</label>
+                    <label class="form-check-label small" for="never_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">jamais</label>
                   </div>
                   <button class="btn btn-sm btn-primary" type="submit">enregistrer</button>
                 </form>
               </td>
               <td><?= $badge ?></td>
+              <td>
+                <button type="button" class="btn btn-primary rounded-pill btn-sm" data-bs-toggle="modal" data-bs-target="#<?= htmlspecialchars($modalId, ENT_QUOTES) ?>">
+                  mot de passe
+                </button>
+                <div class="modal fade text-dark" id="<?= htmlspecialchars($modalId, ENT_QUOTES) ?>" tabindex="-1" aria-hidden="true">
+                  <div class="modal-dialog">
+                    <div class="modal-content">
+                      <form method="post" autocomplete="off">
+                        <div class="modal-header">
+                          <h1 class="modal-title fs-6">Réinitialiser le mot de passe</h1>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                        </div>
+                        <div class="modal-body">
+                          <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
+                          <input type="hidden" name="action" value="reset_password">
+                          <input type="hidden" name="email" value="<?= htmlspecialchars($r['email'], ENT_QUOTES) ?>">
+                          <p class="mb-2"><span class="fw-semibold">Boîte :</span> <span class="font-monospace"><?= htmlspecialchars($r['email']) ?></span></p>
+                          <p class="small text-secondary mb-3">Choisis d’entrer un mot de passe manuellement ou laisse l’application en générer un automatiquement.</p>
+                          <div class="form-check">
+                            <input class="form-check-input" type="radio" name="pwd_mode" id="pwd_manual_<?= htmlspecialchars($hash, ENT_QUOTES) ?>" value="manual" checked data-password-input="#pwd_input_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">
+                            <label class="form-check-label" for="pwd_manual_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">Définir manuellement</label>
+                          </div>
+                          <div class="form-check mb-3">
+                            <input class="form-check-input" type="radio" name="pwd_mode" id="pwd_auto_<?= htmlspecialchars($hash, ENT_QUOTES) ?>" value="auto" data-password-input="#pwd_input_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">
+                            <label class="form-check-label" for="pwd_auto_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">Générer automatiquement</label>
+                          </div>
+                          <label class="form-label" for="pwd_input_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">Nouveau mot de passe</label>
+                          <input type="text" class="form-control" id="pwd_input_<?= htmlspecialchars($hash, ENT_QUOTES) ?>" name="password" placeholder="Entrez le nouveau mot de passe">
+                          <div class="form-text">Ce champ est ignoré si « générer automatiquement » est sélectionné.</div>
+                        </div>
+                        <div class="modal-footer">
+                          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                          <button type="submit" class="btn btn-primary">Mettre à jour</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </td>
             </tr>
           <?php endforeach; else: ?>
             <tr><td colspan="4" class="text-center text-secondary">Aucune expiration enregistrée.</td></tr>
@@ -356,6 +442,7 @@ function renderExpiryBadge(?string $expires_at): string {
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 // Active/désactive l'input date quand on coche "jamais"
 document.addEventListener('change', function (e) {
@@ -364,6 +451,30 @@ document.addEventListener('change', function (e) {
     const dateInput = form.querySelector('input[type="date"][name="expiry_date"]');
     if (dateInput) dateInput.disabled = e.target.checked;
   }
+});
+
+function syncPasswordMode(radio) {
+  if (!radio || !radio.checked) return;
+  const selector = radio.getAttribute('data-password-input');
+  if (!selector) return;
+  const input = document.querySelector(selector);
+  if (!input) return;
+  if (radio.value === 'auto') {
+    input.disabled = true;
+    input.value = '';
+  } else {
+    input.disabled = false;
+  }
+}
+
+document.addEventListener('change', function (e) {
+  if (e.target.matches('input[type="radio"][name="pwd_mode"]')) {
+    syncPasswordMode(e.target);
+  }
+});
+
+document.querySelectorAll('input[type="radio"][name="pwd_mode"]:checked').forEach(function (el) {
+  syncPasswordMode(el);
 });
 </script>
 
