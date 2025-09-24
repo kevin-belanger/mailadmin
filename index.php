@@ -429,7 +429,7 @@ function renderExpiryBadge(?string $expires_at): string {
                   <div class="card shadow-sm">
                     <div class="card-body">
                       <h2 class="h6 mb-3">Note pour <span class="font-monospace"><?= htmlspecialchars($r['email'], ENT_QUOTES) ?></span></h2>
-                      <form method="post" class="d-flex flex-column gap-3">
+                      <form method="post" class="d-flex flex-column gap-3" data-note-form>
                         <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
                         <input type="hidden" name="action" value="save_note">
                         <input type="hidden" name="email" value="<?= htmlspecialchars($r['email'], ENT_QUOTES) ?>">
@@ -444,7 +444,7 @@ function renderExpiryBadge(?string $expires_at): string {
                           <div class="form-text text-end"><span data-note-counter-for="<?= htmlspecialchars($noteTextareaId, ENT_QUOTES) ?>"><?= (int)$noteInitialLength ?></span>/255</div>
                         </div>
                         <div class="d-flex justify-content-between">
-                          <button type="button" class="btn btn-outline-secondary" data-fancybox-close>Fermer</button>
+                          <button type="reset" class="btn btn-outline-secondary" data-fancybox-close>Annuler</button>
                           <button type="submit" class="btn btn-primary">Enregistrer</button>
                         </div>
                       </form>
@@ -560,6 +560,16 @@ document.querySelectorAll('[data-note-input]').forEach(function (textarea) {
     updateNoteCounter(textarea);
   });
   updateNoteCounter(textarea);
+});
+
+document.querySelectorAll('[data-note-form]').forEach(function (form) {
+  form.addEventListener('reset', function () {
+    const textarea = form.querySelector('[data-note-input]');
+    if (!textarea) return;
+    window.setTimeout(function () {
+      updateNoteCounter(textarea);
+    }, 0);
+  });
 });
 </script>
 
