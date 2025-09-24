@@ -378,7 +378,6 @@ function renderExpiryBadge(?string $expires_at): string {
             <tr>
               <th>Boite courriel</th>
               <th>Expiration</th>
-              <th>Statut</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -398,26 +397,61 @@ function renderExpiryBadge(?string $expires_at): string {
               $noteBtnLabel = $noteHasText ? 'note (1)' : 'note';
               $noteValue = is_string($noteRaw) ? (string)$noteRaw : '';
               $noteInitialLength = mb_strlen($noteValue);
+              $expiryModalId = 'expiryModal_' . $hash;
+              if ($r['expires_at'] === null) {
+                  $displayExpiry = 'jamais';
+              } else {
+                  $displayExpiry = $ymd !== '' ? $ymd : 'invalide';
+              }
           ?>
             <tr>
               <td><strong><?= htmlspecialchars($r['email']) ?></strong></td>
               <td>
-                <form method="post" class="d-flex align-items-center gap-2">
-                  <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
-                  <input type="hidden" name="action" value="update_expiry">
-                  <input type="hidden" name="email" value="<?= htmlspecialchars($r['email'], ENT_QUOTES) ?>">
-                  <input style="max-width:200px" type="date" name="expiry_date" class="form-control form-control-sm"
-                         value="<?= htmlspecialchars($ymd, ENT_QUOTES) ?>" <?= $neverChecked?'disabled':'' ?>
-                         style="min-width:150px;">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="never_<?= htmlspecialchars($hash, ENT_QUOTES) ?>"
-                           name="never" <?= $neverChecked ?>>
-                    <label class="form-check-label small" for="never_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">jamais</label>
+                <div class="d-inline-flex align-items-center gap-2 flex-wrap">
+                  <span class="font-monospace"><?= htmlspecialchars($displayExpiry, ENT_QUOTES) ?></span>
+                  <?= $badge ?>
+                  <button type="button"
+                          class="btn btn-outline-light btn-sm"
+                          data-fancybox
+                          data-src="#<?= htmlspecialchars($expiryModalId, ENT_QUOTES) ?>"
+                          aria-label="Modifier l’expiration">
+                    <span aria-hidden="true">✏️</span>
+                    <span class="visually-hidden">Modifier l’expiration</span>
+                  </button>
+                </div>
+                <div style="display:none;" id="<?= htmlspecialchars($expiryModalId, ENT_QUOTES) ?>">
+                  <div class="card shadow-sm">
+                    <div class="card-body">
+                      <h2 class="h6 mb-3">Expiration pour <span class="font-monospace"><?= htmlspecialchars($r['email'], ENT_QUOTES) ?></span></h2>
+                      <form method="post" class="d-flex flex-column gap-3">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
+                        <input type="hidden" name="action" value="update_expiry">
+                        <input type="hidden" name="email" value="<?= htmlspecialchars($r['email'], ENT_QUOTES) ?>">
+                        <div class="d-flex flex-column gap-2">
+                          <label class="form-label" for="expiry_date_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">Date d’expiration</label>
+                          <input type="date"
+                                 class="form-control"
+                                 id="expiry_date_<?= htmlspecialchars($hash, ENT_QUOTES) ?>"
+                                 name="expiry_date"
+                                 value="<?= htmlspecialchars($ymd, ENT_QUOTES) ?>"
+                                 <?= $neverChecked ? 'disabled' : '' ?>>
+                          <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   id="never_<?= htmlspecialchars($hash, ENT_QUOTES) ?>"
+                                   name="never" <?= $neverChecked ?>>
+                            <label class="form-check-label" for="never_<?= htmlspecialchars($hash, ENT_QUOTES) ?>">jamais</label>
+                          </div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                          <button type="button" class="btn btn-outline-secondary" data-fancybox-close>Annuler</button>
+                          <button type="submit" class="btn btn-primary">Enregistrer</button>
+                        </div>
+                      </form>
+                    </div>
                   </div>
-                  <button class="btn btn-sm btn-primary" type="submit">enregistrer</button>
-                </form>
+                </div>
               </td>
-              <td><?= $badge ?></td>
               <td>
                 <button type="button"
                         class="btn <?= $noteBtnClass ?> rounded-pill btn-sm me-2"
@@ -492,7 +526,7 @@ function renderExpiryBadge(?string $expires_at): string {
               </td>
             </tr>
           <?php endforeach; else: ?>
-            <tr><td colspan="4" class="text-center text-secondary">Aucune expiration enregistrée.</td></tr>
+            <tr><td colspan="3" class="text-center text-secondary">Aucune expiration enregistrée.</td></tr>
           <?php endif; ?>
           </tbody>
         </table>
