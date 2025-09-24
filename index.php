@@ -389,7 +389,7 @@ function renderExpiryBadge(?string $expires_at): string {
               </td>
               <td><?= $badge ?></td>
               <td>
-                <button type="button" class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#<?= htmlspecialchars($modalId, ENT_QUOTES) ?>">
+                <button type="button" class="btn btn-primary rounded-pill btn-sm" data-bs-toggle="modal" data-bs-target="#<?= htmlspecialchars($modalId, ENT_QUOTES) ?>">
                   mot de passe
                 </button>
                 <div class="modal fade text-dark" id="<?= htmlspecialchars($modalId, ENT_QUOTES) ?>" tabindex="-1" aria-hidden="true">
