@@ -30,6 +30,37 @@ function cpanel_add_pop(string $local, string $domain, string $password, int $qu
         $errors = implode(' | ', (array)($json['errors'] ?? ['Échec inconnu']));
         throw new RuntimeException($errors);
     }
+return ['ok'=>true, 'data'=>$json['data'] ?? null, 'raw'=>$json];
+}
+
+/** Met à jour le mot de passe d’une boîte POP via UAPI. */
+function cpanel_passwd_pop(string $local, string $domain, string $password): array {
+    if (!CPANEL_TOKEN) throw new RuntimeException('CPANEL_TOKEN manquant.');
+    $url  = "https://" . CPANEL_HOST . ":2083/execute/Email/passwd_pop";
+    $post = ['email'=>$local, 'domain'=>$domain, 'password'=>$password];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query($post),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ["Authorization: cpanel ".CPANEL_USER.":".CPANEL_TOKEN],
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ]);
+    $raw = curl_exec($ch);
+    if ($raw === false) { $e = curl_error($ch); curl_close($ch); throw new RuntimeException("Erreur cURL: $e"); }
+    $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+
+    if ($code !== 200) throw new RuntimeException("UAPI HTTP {$code}");
+    $json = json_decode($raw, true);
+    if (!is_array($json)) throw new RuntimeException("Réponse UAPI non-JSON");
+    if ((int)($json['status'] ?? 0) !== 1) {
+        $errors = implode(' | ', (array)($json['errors'] ?? ['Échec inconnu']));
+        throw new RuntimeException($errors);
+    }
     return ['ok'=>true, 'data'=>$json['data'] ?? null, 'raw'=>$json];
 }
 
