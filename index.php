@@ -88,26 +88,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 }
                 case 'update_expiry': {
-					$email   = trim((string)($_POST['email'] ?? ''));
-					$never   = isset($_POST['never']);
-					$ymd     = trim((string)($_POST['expiry_date'] ?? ''));
+                    $email   = trim((string)($_POST['email'] ?? ''));
+                    $never   = isset($_POST['never']);
+                    $ymd     = trim((string)($_POST['expiry_date'] ?? ''));
 
-					if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-						throw new RuntimeException("Adresse courriel invalide.");
-					}
+                    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        throw new RuntimeException("Adresse courriel invalide.");
+                    }
 
-					if ($never) {
-						set_mailbox_expiry_iso($email, null);
-					} else {
-						if ($ymd === '') throw new RuntimeException("Date manquante (ou coche 'jamais').");
-						$dt = DateTimeImmutable::createFromFormat('!Y-m-d', $ymd, new DateTimeZone('UTC'));
-						if ($dt === false) throw new RuntimeException("Format de date invalide.");
-						set_mailbox_expiry_iso($email, $dt->format('c'));
-					}
+                    if ($never) {
+                        set_mailbox_expiry_iso($email, null);
+                    } else {
+                        if ($ymd === '') throw new RuntimeException("Date manquante (ou coche 'jamais').");
+                        $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $ymd, new DateTimeZone('UTC'));
+                        if ($dt === false) throw new RuntimeException("Format de date invalide.");
+                        set_mailbox_expiry_iso($email, $dt->format('c'));
+                    }
 
-					$flash_msg = "Expiration mise à jour pour {$email}.";
-					break;
-				}
+                    $flash_msg = "Expiration mise à jour pour {$email}.";
+                    break;
+                }
+                case 'save_note': {
+                    $email = trim((string)($_POST['email'] ?? ''));
+                    $noteRaw = (string)($_POST['note'] ?? '');
+
+                    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        throw new RuntimeException("Adresse courriel invalide.");
+                    }
+
+                    $note = trim($noteRaw);
+                    if (mb_strlen($note) > 255) {
+                        throw new RuntimeException("La note doit contenir au plus 255 caractères.");
+                    }
+
+                    $noteValue = ($note === '') ? null : $note;
+                    set_mailbox_note($email, $noteValue);
+
+                    $flash_msg = $noteValue === null
+                        ? "Note supprimée pour {$email}."
+                        : "Note enregistrée pour {$email}.";
+                    break;
+                }
                 default:
                     throw new RuntimeException("Action inconnue.");
             }
@@ -180,7 +201,7 @@ $params = [':now'=>(new DateTimeImmutable('now', new DateTimeZone('UTC')))->form
 $where  = $qexp !== '' ? "WHERE email LIKE :qexp" : '';
 if ($where) $params[':qexp'] = "%{$qexp}%";
 $stmt = $pdo->prepare("
-    SELECT email, expires_at
+    SELECT email, expires_at, note
     FROM mailbox_expiry
     {$where}
     ORDER BY
@@ -216,6 +237,7 @@ function renderExpiryBadge(?string $expires_at): string {
   <title><?= APP_TITLE ?></title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox.css">
 </head>
 <body class="bg-dark text-light">
 <nav class="navbar navbar-expand-lg navbar-dark bg-black">
@@ -368,6 +390,14 @@ function renderExpiryBadge(?string $expires_at): string {
               else { try { $ymd=(new DateTimeImmutable($r['expires_at'], new DateTimeZone('UTC')))->format('Y-m-d'); } catch(Throwable $e){ $ymd=''; } }
               $hash = md5($r['email']);
               $modalId = 'pwdModal_' . $hash;
+              $noteModalId = 'noteModal_' . $hash;
+              $noteTextareaId = 'noteTextarea_' . $hash;
+              $noteRaw = $r['note'] ?? null;
+              $noteHasText = is_string($noteRaw) && trim((string)$noteRaw) !== '';
+              $noteBtnClass = $noteHasText ? 'btn-success' : 'btn-secondary';
+              $noteBtnLabel = $noteHasText ? 'note (1)' : 'note';
+              $noteValue = is_string($noteRaw) ? (string)$noteRaw : '';
+              $noteInitialLength = mb_strlen($noteValue);
           ?>
             <tr>
               <td><strong><?= htmlspecialchars($r['email']) ?></strong></td>
@@ -389,6 +419,38 @@ function renderExpiryBadge(?string $expires_at): string {
               </td>
               <td><?= $badge ?></td>
               <td>
+                <button type="button"
+                        class="btn <?= $noteBtnClass ?> rounded-pill btn-sm me-2"
+                        data-fancybox
+                        data-src="#<?= htmlspecialchars($noteModalId, ENT_QUOTES) ?>">
+                  <?= htmlspecialchars($noteBtnLabel, ENT_QUOTES) ?>
+                </button>
+                <div style="display:none;" id="<?= htmlspecialchars($noteModalId, ENT_QUOTES) ?>">
+                  <div class="card shadow-sm">
+                    <div class="card-body">
+                      <h2 class="h6 mb-3">Note pour <span class="font-monospace"><?= htmlspecialchars($r['email'], ENT_QUOTES) ?></span></h2>
+                      <form method="post" class="d-flex flex-column gap-3">
+                        <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES) ?>">
+                        <input type="hidden" name="action" value="save_note">
+                        <input type="hidden" name="email" value="<?= htmlspecialchars($r['email'], ENT_QUOTES) ?>">
+                        <div>
+                          <label class="form-label" for="<?= htmlspecialchars($noteTextareaId, ENT_QUOTES) ?>">Note</label>
+                          <textarea class="form-control"
+                                    id="<?= htmlspecialchars($noteTextareaId, ENT_QUOTES) ?>"
+                                    name="note"
+                                    rows="6"
+                                    maxlength="255"
+                                    data-note-input><?= htmlspecialchars($noteValue, ENT_QUOTES) ?></textarea>
+                          <div class="form-text text-end"><span data-note-counter-for="<?= htmlspecialchars($noteTextareaId, ENT_QUOTES) ?>"><?= (int)$noteInitialLength ?></span>/255</div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                          <button type="button" class="btn btn-outline-secondary" data-fancybox-close>Fermer</button>
+                          <button type="submit" class="btn btn-primary">Enregistrer</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
                 <button type="button" class="btn btn-primary rounded-pill btn-sm" data-bs-toggle="modal" data-bs-target="#<?= htmlspecialchars($modalId, ENT_QUOTES) ?>">
                   mot de passe
                 </button>
@@ -443,6 +505,7 @@ function renderExpiryBadge(?string $expires_at): string {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox.umd.js"></script>
 <script>
 // Active/désactive l'input date quand on coche "jamais"
 document.addEventListener('change', function (e) {
@@ -475,6 +538,28 @@ document.addEventListener('change', function (e) {
 
 document.querySelectorAll('input[type="radio"][name="pwd_mode"]:checked').forEach(function (el) {
   syncPasswordMode(el);
+});
+
+if (window.Fancybox && typeof Fancybox.bind === 'function') {
+  Fancybox.bind('[data-fancybox]', {
+    dragToClose: false
+  });
+}
+
+function updateNoteCounter(textarea) {
+  if (!textarea || !textarea.id) return;
+  const selector = '[data-note-counter-for="' + textarea.id + '"]';
+  const counter = document.querySelector(selector);
+  if (!counter) return;
+  const length = Array.from(textarea.value || '').length;
+  counter.textContent = length.toString();
+}
+
+document.querySelectorAll('[data-note-input]').forEach(function (textarea) {
+  textarea.addEventListener('input', function () {
+    updateNoteCounter(textarea);
+  });
+  updateNoteCounter(textarea);
 });
 </script>
 
