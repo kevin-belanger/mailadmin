@@ -378,7 +378,6 @@ function renderExpiryBadge(?string $expires_at): string {
             <tr>
               <th>Boite courriel</th>
               <th>Expiration</th>
-              <th>Statut</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -408,12 +407,18 @@ function renderExpiryBadge(?string $expires_at): string {
             <tr>
               <td><strong><?= htmlspecialchars($r['email']) ?></strong></td>
               <td>
-                <button type="button"
-                        class="btn btn-outline-light btn-sm rounded-pill"
-                        data-fancybox
-                        data-src="#<?= htmlspecialchars($expiryModalId, ENT_QUOTES) ?>">
-                  <?= htmlspecialchars($displayExpiry, ENT_QUOTES) ?>
-                </button>
+                <div class="d-inline-flex align-items-center gap-2 flex-wrap">
+                  <span class="font-monospace"><?= htmlspecialchars($displayExpiry, ENT_QUOTES) ?></span>
+                  <?= $badge ?>
+                  <button type="button"
+                          class="btn btn-outline-light btn-sm"
+                          data-fancybox
+                          data-src="#<?= htmlspecialchars($expiryModalId, ENT_QUOTES) ?>"
+                          aria-label="Modifier l’expiration">
+                    <span aria-hidden="true">✏️</span>
+                    <span class="visually-hidden">Modifier l’expiration</span>
+                  </button>
+                </div>
                 <div style="display:none;" id="<?= htmlspecialchars($expiryModalId, ENT_QUOTES) ?>">
                   <div class="card shadow-sm">
                     <div class="card-body">
@@ -447,7 +452,6 @@ function renderExpiryBadge(?string $expires_at): string {
                   </div>
                 </div>
               </td>
-              <td><?= $badge ?></td>
               <td>
                 <button type="button"
                         class="btn <?= $noteBtnClass ?> rounded-pill btn-sm me-2"
@@ -522,7 +526,7 @@ function renderExpiryBadge(?string $expires_at): string {
               </td>
             </tr>
           <?php endforeach; else: ?>
-            <tr><td colspan="4" class="text-center text-secondary">Aucune expiration enregistrée.</td></tr>
+            <tr><td colspan="3" class="text-center text-secondary">Aucune expiration enregistrée.</td></tr>
           <?php endif; ?>
           </tbody>
         </table>
