@@ -28,10 +28,24 @@ function db(): PDO {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS mailbox_expiry (
           email TEXT PRIMARY KEY,
-          expires_at TEXT  -- ISO8601 UTC ou NULL (jamais)
+          expires_at TEXT,  -- ISO8601 UTC ou NULL (jamais)
+          note TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_mailbox_expiry_expires ON mailbox_expiry(expires_at);
     ");
+
+    // Ajout rétrocompatible de la colonne note si elle n'existe pas encore.
+    $cols = $pdo->query('PRAGMA table_info(mailbox_expiry)')->fetchAll(PDO::FETCH_ASSOC);
+    $hasNote = false;
+    foreach ($cols as $col) {
+        if (($col['name'] ?? '') === 'note') {
+            $hasNote = true;
+            break;
+        }
+    }
+    if (!$hasNote) {
+        $pdo->exec('ALTER TABLE mailbox_expiry ADD COLUMN note TEXT');
+    }
     return $pdo;
 }
 
@@ -156,4 +170,15 @@ function delete_expired_mailboxes(): array {
     }
 
     return ['deleted'=>$deleted, 'failed'=>$failed, 'failures'=>$failures];
+}
+
+
+function set_mailbox_note(string $email, ?string $note): void {
+    $pdo = db();
+    $stmt = $pdo->prepare("
+        INSERT INTO mailbox_expiry (email, note)
+        VALUES (:email, :note)
+        ON CONFLICT(email) DO UPDATE SET note = excluded.note
+    ");
+    $stmt->execute([':email' => $email, ':note' => $note]);
 }
